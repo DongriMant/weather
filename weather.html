@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>天気モニタ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    text-align: center;
+    margin: 0;
+    padding: 20px;
+    color: white;
+  }
+  .big {
+    font-size: 48px;
+    font-weight: bold;
+  }
+  .medium {
+    font-size: 28px;
+  }
+  .small {
+    font-size: 20px;
+  }
+</style>
+</head>
+<body>
+
+<div class="big" id="umbrella">取得中...</div>
+<div class="medium" id="weather"></div>
+<div class="small" id="rain"></div>
+<div class="small" id="update"></div>
+
+<script>
+async function fetchWeather() {
+  try {
+    // 千葉市の座標
+    const lat = 35.6074;
+    const lon = 140.1065;
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation_probability,weathercode&timezone=Asia%2FTokyo`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const now = new Date();
+    const hour = now.getHours();
+
+    const rainNow = data.hourly.precipitation_probability[hour];
+    const rainEvening = data.hourly.precipitation_probability[18];
+
+    // 判定ロジック
+    let umbrella = "";
+    let color = "";
+
+    if (rainNow >= 60 || rainEvening >= 60) {
+      umbrella = "☔ 傘：必要";
+      color = "#ab22a3";
+    } else if (rainNow >= 30 || rainEvening >= 30) {
+      umbrella = "🌂 傘：念のため";
+      color = "#ab7319";
+    } else {
+      umbrella = "☀ 傘：不要";
+      color = "#1564b3";
+    }
+
+    document.body.style.backgroundColor = color;
+
+    document.getElementById("umbrella").innerText = umbrella;
+    document.getElementById("weather").innerText = `現在の降水確率：${rainNow}%`;
+    document.getElementById("rain").innerText = `夕方の降水確率：${rainEvening}%`;
+    document.getElementById("update").innerText = `更新：${now.toLocaleTimeString()}`;
+
+  } catch (e) {
+    document.getElementById("umbrella").innerText = "取得失敗";
+  }
+}
+
+// 初回実行
+fetchWeather();
+
+// 10分ごと更新
+setInterval(fetchWeather, 600000);
+</script>
+
+</body>
+</html>
