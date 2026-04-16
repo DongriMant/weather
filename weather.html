@@ -2,84 +2,123 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>天気モニタ</title>
+<title>玄関お天気モニタ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-    text-align: center;
-    margin: 0;
-    padding: 20px;
-    color: white;
+    margin: 0; padding: 16px; color: #fff; text-align: center;
   }
-  .big {
-    font-size: 48px;
-    font-weight: bold;
+  .top { font-size: 40px; font-weight: 700; }
+  .mid { font-size: 24px; margin-top: 6px; }
+  .row { display: flex; justify-content: space-around; margin-top: 12px; }
+  .cell { font-size: 18px; }
+  .label { font-size: 16px; opacity: 0.9; }
+  .box {
+    margin-top: 14px; padding: 10px; border-radius: 14px;
+    background: rgba(255,255,255,0.12);
   }
-  .medium {
-    font-size: 28px;
-  }
-  .small {
-    font-size: 20px;
-  }
+  .small { font-size: 16px; margin-top: 6px; }
 </style>
 </head>
 <body>
 
-<div class="big" id="umbrella">取得中...</div>
-<div class="medium" id="weather"></div>
-<div class="small" id="rain"></div>
+<div class="top" id="todaySummary">取得中...</div>
+<div class="mid" id="nowRain"></div>
+
+<div class="box">
+  <div class="label">3時間毎の降水確率</div>
+  <div class="row" id="threeHours"></div>
+</div>
+
+<div class="box">
+  <div class="label" id="tomorrowLabel">明日の傘予報</div>
+  <div class="mid" id="tomorrowSummary"></div>
+</div>
+
 <div class="small" id="update"></div>
 
 <script>
-async function fetchWeather() {
-  try {
-    // 千葉市の座標
-    const lat = 35.6074;
-    const lon = 140.1065;
+const lat = 35.6074; // 千葉
+const lon = 140.1065;
 
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation_probability,weathercode&timezone=Asia%2FTokyo`;
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const now = new Date();
-    const hour = now.getHours();
-
-    const rainNow = data.hourly.precipitation_probability[hour];
-    const rainEvening = data.hourly.precipitation_probability[18];
-
-    // 判定ロジック
-    let umbrella = "";
-    let color = "";
-
-    if (rainNow >= 60 || rainEvening >= 60) {
-      umbrella = "☔ 傘：必要";
-      color = "#ab22a3";
-    } else if (rainNow >= 30 || rainEvening >= 30) {
-      umbrella = "🌂 傘：念のため";
-      color = "#ab7319";
-    } else {
-      umbrella = "☀ 傘：不要";
-      color = "#1564b3";
-    }
-
-    document.body.style.backgroundColor = color;
-
-    document.getElementById("umbrella").innerText = umbrella;
-    document.getElementById("weather").innerText = `現在の降水確率：${rainNow}%`;
-    document.getElementById("rain").innerText = `夕方の降水確率：${rainEvening}%`;
-    document.getElementById("update").innerText = `更新：${now.toLocaleTimeString()}`;
-
-  } catch (e) {
-    document.getElementById("umbrella").innerText = "取得失敗";
-  }
+// weathercode → アイコン（ざっくり）
+function getIcon(code){
+  if(code === 0) return "☀";
+  if(code <= 3) return "⛅";
+  if(code <= 67) return "🌧";
+  return "☁";
 }
 
-// 初回実行
-fetchWeather();
+function judgeUmbrella(maxProb){
+  if(maxProb >= 60) return "☔ 傘：必要";
+  if(maxProb >= 30) return "🌂 傘：念のため";
+  return "☀ 傘：不要";
+}
 
-// 10分ごと更新
+async function fetchWeather(){
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation_probability,weathercode&timezone=Asia%2FTokyo`;
+  const res = await fetch(url);
+  const data = await res.json();
+
+  const now = new Date();
+  const hour = now.getHours();
+
+  const probs = data.hourly.precipitation_probability;
+  const codes = data.hourly.weathercode;
+
+  // --- 今日のサマリ（今〜夜）
+  const todaySlice = probs.slice(hour, 24);
+  const todayMax = Math.max(...todaySlice);
+  const icon = getIcon(codes[hour]);
+
+  document.getElementById("todaySummary").innerText =
+    `${judgeUmbrella(todayMax)}`;
+
+  document.getElementById("nowRain").innerText =
+    `現在の降水確率：${probs[hour]}%`;
+
+  // 背景色
+  if (todayMax >= 60) document.body.style.backgroundColor = "#d32f2f";
+  else if (todayMax >= 30) document.body.style.backgroundColor = "#f9a825";
+  else document.body.style.backgroundColor = "#1976d2";
+
+  // --- 3時間ごと表示（次のキリの3時間から）
+  const container = document.getElementById("threeHours");
+  container.innerHTML = "";
+
+  let start = Math.ceil(hour / 3) * 3;
+  for(let i=0; i<5; i++){
+    let h = start + i*3;
+    if(h >= 24) break;
+
+    const div = document.createElement("div");
+    div.className = "cell";
+    div.innerHTML = `${h}時<br>${probs[h]}%`;
+    container.appendChild(div);
+  }
+
+  // --- 明日朝（6〜9時）の傘判定
+  const tomorrowStart = 24 + 6; // 翌日6時
+  const tomorrowSlice = probs.slice(tomorrowStart, tomorrowStart + 4);
+  const tomorrowMax = Math.max(...tomorrowSlice);
+
+  const tomorrowIcon = getIcon(codes[tomorrowStart]);
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  document.getElementById("tomorrowLabel").innerText =
+    `明日 ${tomorrow.getMonth()+1}/${tomorrow.getDate()} の傘予報`;
+
+  document.getElementById("tomorrowSummary").innerText =
+    `${judgeUmbrella(tomorrowMax)}`;
+
+  document.getElementById("update").innerText =
+    `更新：${now.toLocaleTimeString()}`;
+}
+
+fetchWeather();
 setInterval(fetchWeather, 600000);
 </script>
 
