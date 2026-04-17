@@ -7,24 +7,39 @@
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-    margin: 0; padding: 16px; color: #fff; text-align: center;
+    margin: 0;
+    padding: 16px;
+    color: #fff;
+    text-align: center;
   }
-  .top { font-size: 44px; font-weight: 700; }
-  .mid { font-size: 28px; margin-top: 6px; }
-  .row { display: flex; justify-content: space-around; margin-top: 12px; }
-  .cell { font-size: 20px; }
-  .label { font-size: 18px; opacity: 0.9; }
+
+  .date { font-size: 20px; margin-bottom: 6px; opacity: 0.9; }
+  .top { font-size: 43px; font-weight: 700; }
+  .mid { font-size: 27px; margin-top: 6px; }
+  .small { font-size: 19px; margin-top: 6px; }
+  .label { font-size: 19px; opacity: 0.95; }
+  .cell { font-size: 21px; }
+
+  .row {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 12px;
+  }
+
   .box {
-    margin-top: 14px; padding: 10px; border-radius: 14px;
+    margin-top: 14px;
+    padding: 10px;
+    border-radius: 14px;
     background: rgba(255,255,255,0.12);
   }
-  .small { font-size: 16px; margin-top: 6px; }
 </style>
 </head>
 <body>
 
+<div class="date" id="todayDate"></div>
 <div class="top" id="todaySummary">取得中...</div>
-<div class="mid" id="nowRain"></div>
+<div class="mid" id="tempToday"></div>
+<div class="small" id="nowRain"></div>
 
 <div class="box">
   <div class="label">3時間毎の降水確率</div>
@@ -34,20 +49,19 @@
 <div class="box">
   <div class="label" id="tomorrowLabel">明日の傘予報</div>
   <div class="mid" id="tomorrowSummary"></div>
+  <div class="small" id="tempTomorrow"></div>
 </div>
 
 <div class="small" id="update"></div>
 
 <script>
-const lat = 35.6074; // 千葉
+const lat = 35.6074;
 const lon = 140.1065;
 
-// weathercode → アイコン（ざっくり）
-function getIcon(code){
-  if(code === 0) return "☀";
-  if(code <= 3) return "⛅";
-  if(code <= 67) return "🌧";
-  return "☁";
+const weekdays = ["日","月","火","水","木","金","土"];
+
+function formatDateJP(date){
+  return `${date.getMonth()+1}/${date.getDate()}(${weekdays[date.getDay()]})`;
 }
 
 function judgeUmbrella(maxProb){
@@ -57,20 +71,27 @@ function judgeUmbrella(maxProb){
 }
 
 async function fetchWeather(){
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation_probability,weathercode&timezone=Asia%2FTokyo`;
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&hourly=precipitation_probability,temperature_2m` +
+    `&timezone=Asia%2FTokyo`;
+
   const res = await fetch(url);
   const data = await res.json();
 
   const now = new Date();
   const hour = now.getHours();
 
-  const probs = data.hourly.precipitation_probability;
-  const codes = data.hourly.weathercode;
+  // 今日の日付表示
+  document.getElementById("todayDate").innerText =
+    `今日 ${formatDateJP(now)}`;
 
-  // --- 今日のサマリ（今〜夜）
+  const probs = data.hourly.precipitation_probability;
+  const temps = data.hourly.temperature_2m;
+
+  // --- 今日
   const todaySlice = probs.slice(hour, 24);
   const todayMax = Math.max(...todaySlice);
-  const icon = getIcon(codes[hour]);
 
   document.getElementById("todaySummary").innerText =
     `${judgeUmbrella(todayMax)}`;
@@ -78,18 +99,22 @@ async function fetchWeather(){
   document.getElementById("nowRain").innerText =
     `現在の降水確率：${probs[hour]}%`;
 
+  const todayTemps = temps.slice(0, 24);
+  document.getElementById("tempToday").innerText =
+    `今日 ${Math.min(...todayTemps).toFixed(1)}℃ / ${Math.max(...todayTemps).toFixed(1)}℃`;
+
   // 背景色
   if (todayMax >= 60) document.body.style.backgroundColor = "#d32f2f";
   else if (todayMax >= 30) document.body.style.backgroundColor = "#f9a825";
   else document.body.style.backgroundColor = "#1976d2";
 
-  // --- 3時間ごと表示（次のキリの3時間から）
+  // --- 3時間ごと
   const container = document.getElementById("threeHours");
   container.innerHTML = "";
 
   let start = Math.ceil(hour / 3) * 3;
   for(let i=0; i<5; i++){
-    let h = start + i*3;
+    let h = start + i * 3;
     if(h >= 24) break;
 
     const div = document.createElement("div");
@@ -98,21 +123,22 @@ async function fetchWeather(){
     container.appendChild(div);
   }
 
-  // --- 明日朝（6〜9時）の傘判定
-  const tomorrowStart = 24 + 6; // 翌日6時
-  const tomorrowSlice = probs.slice(tomorrowStart, tomorrowStart + 4);
-  const tomorrowMax = Math.max(...tomorrowSlice);
-
-  const tomorrowIcon = getIcon(codes[tomorrowStart]);
-
+  // --- 明日
   const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setDate(now.getDate() + 1);
 
   document.getElementById("tomorrowLabel").innerText =
-    `明日 ${tomorrow.getMonth()+1}/${tomorrow.getDate()} の傘予報`;
+    `明日 ${formatDateJP(tomorrow)} の傘予報`;
+
+  const tomorrowSlice = probs.slice(24 + 6, 24 + 10);
+  const tomorrowMax = Math.max(...tomorrowSlice);
 
   document.getElementById("tomorrowSummary").innerText =
     `${judgeUmbrella(tomorrowMax)}`;
+
+  const tomorrowTemps = temps.slice(24, 48);
+  document.getElementById("tempTomorrow").innerText =
+    `明日 ${Math.min(...tomorrowTemps).toFixed(1)}℃ / ${Math.max(...tomorrowTemps).toFixed(1)}℃`;
 
   document.getElementById("update").innerText =
     `更新：${now.toLocaleTimeString()}`;
