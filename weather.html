@@ -37,6 +37,7 @@
 <body>
 
 <div class="date" id="todayDate"></div>
+<div class="mid" id="todaySummaryTitle">現在から21時までの傘予報</div>
 <div class="top" id="todaySummary">取得中...</div>
 <div class="mid" id="tempToday"></div>
 <div class="small" id="nowRain"></div>
@@ -119,7 +120,12 @@ async function fetchWeather(){
     const temps = data.hourly.temperature_2m;
 
     // 今日
-    const todayMax = Math.max(...probs.slice(0,24));
+    if (hour >= 18) {
+      document.getElementById("todaySummaryTitle").innerText = "現在から24時までの傘予報";
+      todayMax = Math.max(...probs.slice(hour,24));
+    } else {
+      todayMax = Math.max(...probs.slice(hour,21));
+    }
 
     document.getElementById("todaySummary").innerText =
       judgeUmbrella(todayMax);
@@ -155,7 +161,7 @@ async function fetchWeather(){
     tomorrow.setDate(now.getDate()+1);
 
     document.getElementById("tomorrowLabel").innerText =
-      `明日 ${formatDateJP(tomorrow)} の傘予報`;
+      `明日 ${formatDateJP(tomorrow)} 朝の傘予報`;
 
     const tomorrowMax = Math.max(...probs.slice(24+6,24+10));
 
